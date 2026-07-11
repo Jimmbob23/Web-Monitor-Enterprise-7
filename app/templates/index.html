@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block content %}
+<style id="enterprise7-monitor-table-dark">
+  /*
+    Die angelegten Monitore werden bewusst immer dunkel angezeigt.
+    Damit ist die Darstellung unabhängig von Bootstrap-Theme und Browser-Cache.
+  */
+  #monitor-table,
+  #monitor-table.table,
+  #monitor-table.table-dark,
+  #monitor-table.table-darkish,
+  #monitor-table thead,
+  #monitor-table tbody,
+  #monitor-table tfoot,
+  #monitor-table tr,
+  #monitor-table th,
+  #monitor-table td,
+  #monitor-table > :not(caption) > * > * {
+    --bs-table-color: #ffffff !important;
+    --bs-table-bg: #111827 !important;
+    --bs-table-border-color: #374151 !important;
+    --bs-table-striped-color: #ffffff !important;
+    --bs-table-striped-bg: #111827 !important;
+    --bs-table-hover-color: #ffffff !important;
+    --bs-table-hover-bg: #1f2937 !important;
+    --bs-table-active-color: #ffffff !important;
+    --bs-table-active-bg: #1f2937 !important;
+    background: #111827 !important;
+    background-color: #111827 !important;
+    color: #ffffff !important;
+    border-color: #374151 !important;
+    box-shadow: none !important;
+  }
+
+  #monitor-table tbody tr:hover,
+  #monitor-table tbody tr:hover > *,
+  #monitor-table tbody tr:hover td {
+    background: #1f2937 !important;
+    background-color: #1f2937 !important;
+    color: #ffffff !important;
+  }
+
+  #monitor-table a:not(.btn) {
+    color: #93c5fd !important;
+  }
+</style>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="stat">Monitore<br><strong>{{stats.sites}}</strong></div></div>
+  <div class="col-6 col-lg-3"><div class="stat">Aktiv<br><strong>{{stats.enabled}}</strong></div></div>
+  <div class="col-6 col-lg-3"><div class="stat">Änderungen offen<br><strong>{{stats.changed}}</strong></div></div>
+  <div class="col-6 col-lg-3"><div class="stat">Fehler<br><strong>{{stats.errors}}</strong></div></div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-12 col-lg-6"><input class="form-control" name="q" value="{{q}}" placeholder="Suche nach Name, URL oder Tags"></div>
+  <div class="col-6 col-lg-2"><select class="form-select" name="folder"><option value="">Alle Ordner</option>{% for f in folders %}<option value="{{f.name}}" {% if selected_folder==f.name %}selected{% endif %}>{{f.name}}</option>{% endfor %}</select></div>
+  <div class="col-6 col-lg-2"><select class="form-select" name="status"><option value="">Alle Status</option><option value="active" {% if selected_status=="active" %}selected{% endif %}>Aktiv</option><option value="paused" {% if selected_status=="paused" %}selected{% endif %}>Pausiert</option></select></div>
+  <div class="col-12 col-lg-2"><button class="btn btn-outline-primary w-100">Filtern</button></div>
+</form>
+
+<h2>Angelegte Monitore</h2>
+<div class="table-responsive mb-4">
+<table id="monitor-table" class="table table-dark table-darkish align-middle">
+<thead><tr><th>Name</th><th>URL</th><th>Ordner/Tags</th><th>Plan</th><th>Status</th><th>Antwort</th><th>Aktionen</th></tr></thead>
+<tbody>
+{% for s in sites %}
+<tr class="{% if not s.enabled %}opacity-50{% endif %}">
+<td>
+  <a href="/sites/{{s.id}}">{{s.name}}</a>
+  {% if s.unread_change %}<span class="badge text-bg-danger">Änderung offen</span>{% endif %}
+  {% if not s.enabled %}<span class="badge text-bg-secondary">pausiert</span>{% endif %}
+</td>
+<td class="text-break">{{s.url}}</td>
+<td>{{s.folder.name if s.folder else ""}}<br><small>{{s.tags_csv}}</small></td>
+<td>{% if s.schedule_type=="cron" %}{{s.cron_expression}}{% else %}{{s.interval_seconds}} Sekunden{% endif %}</td>
+<td>{{s.last_status}}</td>
+<td>{{s.last_duration_ms}} ms / HTTP {{s.last_http_status}}</td>
+<td class="text-nowrap">
+  <a class="btn btn-sm btn-outline-info" href="/sites/{{s.id}}">Details</a>
+  <form class="d-inline" method="post" action="/sites/{{s.id}}/check"><button class="btn btn-sm btn-outline-primary">Prüfen</button></form>
+  <form class="d-inline" method="post" action="/sites/{{s.id}}/toggle"><button class="btn btn-sm btn-outline-warning">{% if s.enabled %}Pausieren{% else %}Aktivieren{% endif %}</button></form>
+  <form class="d-inline" method="post" action="/sites/{{s.id}}/delete" onsubmit="return confirm('Monitor und Historie löschen?')"><button class="btn btn-sm btn-outline-danger">Löschen</button></form>
+</td>
+</tr>
+{% else %}<tr><td colspan="7">Noch keine Monitore.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+
+<details class="card mb-4">
+<summary class="card-header clickable-summary">Neuen Monitor konfigurieren</summary>
+<div class="card-body">
+<form method="post" action="/sites">
+<h5>Allgemein</h5>
+<div class="row g-3">
+  <div class="col-12 col-lg-3"><label class="form-label">Name</label><input class="form-control" name="name"></div>
+  <div class="col-12 col-lg-5"><label class="form-label">URL</label><input class="form-control" name="url" required></div>
+  <div class="col-6 col-lg-2"><label class="form-label">Ordner</label><input class="form-control" name="folder_name"></div>
+  <div class="col-6 col-lg-2"><label class="form-label">Tags</label><input class="form-control" name="tags_csv"></div>
+</div>
+<h5 class="mt-4">Zeitplan</h5>
+<div class="row g-3">
+  <div class="col-12 col-md-4"><label class="form-label">Typ</label><select class="form-select schedule-type" name="schedule_type"><option value="interval">Intervall</option><option value="cron">Cron</option></select></div>
+  <div class="col-12 col-md-4"><label class="form-label">Intervall in Sekunden</label><input class="form-control" type="number" name="interval_seconds" value="300"></div>
+  <div class="col-12 col-md-4"><label class="form-label">Cron-Ausdruck</label><input class="form-control cron-expression" name="cron_expression"></div>
+</div>
+
+<div class="cron-helper border rounded p-3 mt-3">
+  <h6>Visueller Cron-Generator</h6>
+  <div class="row g-2">
+    <div class="col-12 col-lg-3">
+      <label class="form-label">Vorlage</label>
+      <select class="form-select cron-preset">
+        <option value="every_minutes">Alle X Minuten</option>
+        <option value="daily">Täglich</option>
+        <option value="hour_range">Stündlich im Zeitraum</option>
+        <option value="weekly">Wöchentlich</option>
+        <option value="weekdays">Bestimmte Wochentage</option>
+        <option value="weekdays_hours">Bestimmte Tage und Uhrzeiten</option>
+        <option value="monthly">Bestimmte Tage im Monat</option>
+      </select>
+    </div>
+    <div class="col-6 col-md-3 col-lg-2"><label class="form-label">X Minuten</label><input class="form-control cron-every" type="number" value="10" min="1" max="59"></div>
+    <div class="col-6 col-md-3 col-lg-2"><label class="form-label">Stunde/Start</label><input class="form-control cron-hour" type="number" value="8" min="0" max="23"></div>
+    <div class="col-6 col-md-3 col-lg-2"><label class="form-label">Endstunde</label><input class="form-control cron-hour-end" type="number" value="18" min="0" max="23"></div>
+    <div class="col-6 col-md-3 col-lg-2"><label class="form-label">Minute</label><input class="form-control cron-minute" type="number" value="0" min="0" max="59"></div>
+  </div>
+  <div class="weekday-grid mt-3">
+    <label><input class="cron-weekday" type="checkbox" value="1"> Mo</label>
+    <label><input class="cron-weekday" type="checkbox" value="2"> Di</label>
+    <label><input class="cron-weekday" type="checkbox" value="3"> Mi</label>
+    <label><input class="cron-weekday" type="checkbox" value="4"> Do</label>
+    <label><input class="cron-weekday" type="checkbox" value="5"> Fr</label>
+    <label><input class="cron-weekday" type="checkbox" value="6"> Sa</label>
+    <label><input class="cron-weekday" type="checkbox" value="0"> So</label>
+  </div>
+  <div class="row g-2 mt-2">
+    <div class="col-12 col-md-6"><label class="form-label">Mehrere Stunden</label><input class="form-control cron-hours" placeholder="8,12,18"></div>
+    <div class="col-12 col-md-6"><label class="form-label">Tage im Monat</label><input class="form-control cron-month-days" placeholder="1,15,28"></div>
+  </div>
+  <div class="mt-3">
+    <button type="button" class="btn btn-outline-info cron-apply">Cron übernehmen</button>
+    <span class="ms-2">Vorschau: <code class="cron-preview"></code></span>
+  </div>
+</div>
+
+<h5 class="mt-4">Screenshot & Erkennung</h5>
+<div class="row g-3">
+  <div class="col-6 col-lg-2"><label class="form-label">Schwelle %</label><input class="form-control" type="number" step="0.01" name="threshold_percent" value="0.5"></div>
+  <div class="col-6 col-lg-2"><label class="form-label">Wartezeit</label><input class="form-control" type="number" name="wait_seconds" value="2"></div>
+  <div class="col-6 col-lg-2"><label class="form-label">Breite</label><input class="form-control" type="number" name="viewport_width" value="1440"></div>
+  <div class="col-6 col-lg-2"><label class="form-label">Höhe</label><input class="form-control" type="number" name="viewport_height" value="1200"></div>
+  <div class="col-12 col-lg-2"><label class="form-label">Cookie-Modus</label><select class="form-select" name="cookie_mode"><option value="auto">Auto</option><option value="click">Klicken</option><option value="hide">Ausblenden</option><option value="off">Aus</option></select></div>
+  <div class="col-12 col-lg-2"><label class="form-label">CSS ignorieren</label><input class="form-control" name="ignore_selectors"></div>
+</div>
+<button class="btn btn-primary mt-3">Monitor anlegen</button>
+</form>
+</div>
+</details>
+<script src="/static/cron-generator.js"></script>
+{% endblock %}

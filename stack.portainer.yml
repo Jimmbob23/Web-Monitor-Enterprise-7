@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wm7-beta-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: webmonitor7beta
+      POSTGRES_USER: webmonitor
+      POSTGRES_PASSWORD: bitte-aendern
+    volumes:
+      - wm7_beta_postgres:/var/lib/postgresql/data
+
+  web-monitor:
+    image: ghcr.io/jimmbob23/web-monitor-enterprise-7-beta:beta
+    container_name: web-monitor-enterprise-7-beta
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8007:8000"
+      - "6080:6080"
+    volumes:
+      - wm7_beta_data:/app/data
+    environment:
+      DATABASE_URL: postgresql+psycopg2://webmonitor:bitte-aendern@postgres:5432/webmonitor7beta
+      DATA_DIR: /app/data
+      APP_SECRET: bitte-unbedingt-aendern
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin123
+      APP_TIMEZONE: Europe/Berlin
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  wm7_beta_postgres:
+  wm7_beta_data:

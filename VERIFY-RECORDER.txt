@@ -1,0 +1,4 @@
+persistent_jsonl: True
+read_on_stop: True
+no_delete_on_empty: True
+recorder_ui: True

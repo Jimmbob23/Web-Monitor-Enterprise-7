@@ -1,0 +1,17 @@
+check_route: True
+pause_route: True
+delete_site_route: True
+delete_history_route: True
+delete_change_route: True
+backup_page: True
+restore_route: True
+csv_backup: True
+json_backup: True
+users: True
+recorder_start: True
+recorder_stop: True
+recorder_ui: True
+cron_generator: True
+dark_monitor_table: True
+correct_image: True
+novnc_port: True

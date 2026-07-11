@@ -1,0 +1,5 @@
+csv_create: True
+csv_restore: True
+csv_service: True
+macro_backup: True
+template_csv: True

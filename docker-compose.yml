@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: webmonitor7beta
+      POSTGRES_USER: webmonitor
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  web-monitor:
+    build: .
+    depends_on:
+      - postgres
+    ports:
+      - "8007:8000"
+      - "6080:6080"
+    volumes:
+      - ./data/app:/app/data
+    environment:
+      DATABASE_URL: postgresql+psycopg2://webmonitor:devpassword@postgres:5432/webmonitor7beta
+      DATA_DIR: /app/data
+      APP_SECRET: dev-secret-change-me
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin123
+      APP_TIMEZONE: Europe/Berlin
