@@ -8,7 +8,11 @@ from app.services.macros import execute_macro_actions
 
 
 def hide_custom(page, selectors: str):
-    for selector in [item.strip() for item in selectors.split(",") if item.strip()]:
+    for selector in [
+        item.strip()
+        for item in selectors.split(",")
+        if item.strip()
+    ]:
         try:
             page.locator(selector).evaluate_all(
                 "(elements) => elements.forEach((element) => element.remove())"
@@ -23,12 +27,17 @@ def capture(site, output_path: Path, actions) -> tuple[int, int]:
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
+
         context = browser.new_context(
-            viewport={"width": site.viewport_width, "height": site.viewport_height},
+            viewport={
+                "width": site.viewport_width,
+                "height": site.viewport_height,
+            },
             ignore_https_errors=True,
             locale="de-DE",
             timezone_id="Europe/Berlin",
         )
+
         page = context.new_page()
 
         response = page.goto(
@@ -36,28 +45,56 @@ def capture(site, output_path: Path, actions) -> tuple[int, int]:
             wait_until="domcontentloaded",
             timeout=60000,
         )
+
         status = response.status if response else 0
 
+        # Cookiebanner erscheinen häufig verzögert.
         page.wait_for_timeout(1200)
-        handle_cookies(page, site.cookie_mode, site.ignore_selectors)
 
+        # Erste Bereinigung unmittelbar nach dem Laden.
+        handle_cookies(
+            page,
+            site.cookie_mode,
+            extra_selectors=site.ignore_selectors,
+        )
+
+        # Aufgezeichnete Interaktions-Makros ausführen.
         execute_macro_actions(page, actions)
 
+        # Makro-Navigation kann ein neues Banner erzeugen.
         page.wait_for_timeout(500)
-        handle_cookies(page, site.cookie_mode, site.ignore_selectors)
+
+        handle_cookies(
+            page,
+            site.cookie_mode,
+            extra_selectors=site.ignore_selectors,
+        )
+
         hide_custom(page, site.ignore_selectors)
 
         try:
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_load_state(
+                "networkidle",
+                timeout=15000,
+            )
         except Exception:
             pass
 
-        handle_cookies(page, site.cookie_mode, site.ignore_selectors)
+        # Letzte Bereinigung direkt vor dem Screenshot.
+        handle_cookies(
+            page,
+            site.cookie_mode,
+            extra_selectors=site.ignore_selectors,
+        )
 
         if site.wait_seconds:
             page.wait_for_timeout(site.wait_seconds * 1000)
 
-        page.screenshot(path=str(output_path), full_page=True)
+        page.screenshot(
+            path=str(output_path),
+            full_page=True,
+        )
+
         browser.close()
 
     return status, int((time.perf_counter() - started) * 1000)

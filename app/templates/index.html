@@ -1,13 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<style id="enterprise7-monitor-table-dark">
-  /*
-    Die angelegten Monitore werden bewusst immer dunkel angezeigt.
-    Damit ist die Darstellung unabhängig von Bootstrap-Theme und Browser-Cache.
-  */
+<style id="enterprise7-monitor-table-adaptive">
   #monitor-table,
   #monitor-table.table,
-  #monitor-table.table-dark,
   #monitor-table.table-darkish,
   #monitor-table thead,
   #monitor-table tbody,
@@ -16,34 +11,71 @@
   #monitor-table th,
   #monitor-table td,
   #monitor-table > :not(caption) > * > * {
-    --bs-table-color: #ffffff !important;
-    --bs-table-bg: #111827 !important;
-    --bs-table-border-color: #374151 !important;
-    --bs-table-striped-color: #ffffff !important;
-    --bs-table-striped-bg: #111827 !important;
-    --bs-table-hover-color: #ffffff !important;
-    --bs-table-hover-bg: #1f2937 !important;
-    --bs-table-active-color: #ffffff !important;
-    --bs-table-active-bg: #1f2937 !important;
-    background: #111827 !important;
-    background-color: #111827 !important;
-    color: #ffffff !important;
-    border-color: #374151 !important;
+    --bs-table-color: #111827 !important;
+    --bs-table-bg: #ffffff !important;
+    --bs-table-border-color: #d1d5db !important;
+    --bs-table-striped-color: #111827 !important;
+    --bs-table-striped-bg: #f8fafc !important;
+    --bs-table-hover-color: #111827 !important;
+    --bs-table-hover-bg: #f1f5f9 !important;
+    --bs-table-active-color: #111827 !important;
+    --bs-table-active-bg: #e5e7eb !important;
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
     box-shadow: none !important;
   }
 
   #monitor-table tbody tr:hover,
   #monitor-table tbody tr:hover > *,
   #monitor-table tbody tr:hover td {
-    background: #1f2937 !important;
-    background-color: #1f2937 !important;
-    color: #ffffff !important;
+    background-color: #f1f5f9 !important;
+    color: #111827 !important;
   }
 
   #monitor-table a:not(.btn) {
-    color: #93c5fd !important;
+    color: #2563eb !important;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    #monitor-table,
+    #monitor-table.table,
+    #monitor-table.table-darkish,
+    #monitor-table thead,
+    #monitor-table tbody,
+    #monitor-table tfoot,
+    #monitor-table tr,
+    #monitor-table th,
+    #monitor-table td,
+    #monitor-table > :not(caption) > * > * {
+      --bs-table-color: #ffffff !important;
+      --bs-table-bg: #111827 !important;
+      --bs-table-border-color: #374151 !important;
+      --bs-table-striped-color: #ffffff !important;
+      --bs-table-striped-bg: #111827 !important;
+      --bs-table-hover-color: #ffffff !important;
+      --bs-table-hover-bg: #1f2937 !important;
+      --bs-table-active-color: #ffffff !important;
+      --bs-table-active-bg: #1f2937 !important;
+      background-color: #111827 !important;
+      color: #ffffff !important;
+      border-color: #374151 !important;
+      box-shadow: none !important;
+    }
+
+    #monitor-table tbody tr:hover,
+    #monitor-table tbody tr:hover > *,
+    #monitor-table tbody tr:hover td {
+      background-color: #1f2937 !important;
+      color: #ffffff !important;
+    }
+
+    #monitor-table a:not(.btn) {
+      color: #93c5fd !important;
+    }
   }
 </style>
+
 <div class="row g-3 mb-4">
   <div class="col-6 col-lg-3"><div class="stat">Monitore<br><strong>{{stats.sites}}</strong></div></div>
   <div class="col-6 col-lg-3"><div class="stat">Aktiv<br><strong>{{stats.enabled}}</strong></div></div>
@@ -60,7 +92,7 @@
 
 <h2>Angelegte Monitore</h2>
 <div class="table-responsive mb-4">
-<table id="monitor-table" class="table table-dark table-darkish align-middle">
+<table id="monitor-table" class="table table-darkish align-middle">
 <thead><tr><th>Name</th><th>URL</th><th>Ordner/Tags</th><th>Plan</th><th>Status</th><th>Antwort</th><th>Aktionen</th></tr></thead>
 <tbody>
 {% for s in sites %}

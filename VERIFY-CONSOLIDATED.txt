@@ -1,0 +1,7 @@
+correct_image: True
+adaptive_darkmode: True
+strict_mode_index: True
+strict_mode_site: True
+necessary_mode: True
+cookie_backend: True
+before_after_cookie_handling: True
