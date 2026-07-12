@@ -1,0 +1,5 @@
+index_strict: True
+site_strict: True
+necessary_mode: True
+cookie_service: True
+before_after_macro: True
