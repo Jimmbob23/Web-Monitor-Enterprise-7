@@ -33,6 +33,7 @@ class RecorderSession:
     thread: threading.Thread | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     injected_frames: int = 0
+    polls: int = 0
 
 
 class MacroRecorder:
@@ -86,10 +87,7 @@ class MacroRecorder:
 
             self._reset_record_file(site_id)
 
-            session = RecorderSession(
-                site_id=site_id,
-                url=url,
-            )
+            session = RecorderSession(site_id=site_id, url=url)
             self._session = session
 
             session.thread = threading.Thread(
@@ -120,62 +118,22 @@ class MacroRecorder:
                 timezone_id="Europe/Berlin",
             )
 
-            def record_binding(source: dict[str, Any], payload: Any) -> bool:
-                if not isinstance(payload, dict):
-                    return False
-
-                action = self._normalize(payload)
-                if not action:
-                    return False
-
-                with self._lock:
-                    if self._session is not session:
-                        return False
-
-                    if session.state not in {
-                        "starting",
-                        "recording",
-                        "stopping",
-                    }:
-                        return False
-
-                    self._append_deduplicated(
-                        session.actions,
-                        action,
-                    )
-                    self._persist_action(
-                        session.site_id,
-                        action,
-                    )
-
-                return True
-
-            session.context.expose_binding(
-                "wmRecordAction",
-                record_binding,
-            )
-
             script = self._recorder_script()
 
-            # Für neue Dokumente und Navigationen.
+            # Wird bei jedem neuen Dokument vor Seitenskripten geladen.
             session.context.add_init_script(script)
 
             session.page = session.context.new_page()
 
-            def reinject(frame: Frame) -> None:
+            def inject(frame: Frame) -> None:
                 try:
                     frame.evaluate(script)
                     with self._lock:
                         session.injected_frames += 1
                 except Exception:
-                    # Cross-Origin-, PDF- oder noch nicht fertige Frames
-                    # dürfen die Aufnahme nicht abbrechen.
                     pass
 
-            session.page.on(
-                "framenavigated",
-                reinject,
-            )
+            session.page.on("framenavigated", inject)
 
             session.page.goto(
                 session.url,
@@ -183,36 +141,84 @@ class MacroRecorder:
                 timeout=60000,
             )
 
-            # Explizite Injektion nach dem ersten Laden. Dies ist der
-            # entscheidende Fallback, falls add_init_script auf einer
-            # speziellen Webseite nicht gegriffen hat.
             for frame in session.page.frames:
-                reinject(frame)
+                inject(frame)
 
             session.state = "recording"
 
-            while not session.stop_event.wait(0.20):
+            while not session.stop_event.is_set():
                 if not session.browser or not session.browser.is_connected():
                     break
 
-                # Dynamisch erzeugte Frames regelmäßig nachinjizieren.
-                if session.page:
-                    for frame in session.page.frames:
-                        try:
-                            installed = frame.evaluate(
-                                "() => Boolean(window.__wmRecorderInstalled)"
-                            )
-                        except Exception:
-                            installed = True
+                if not session.page:
+                    time.sleep(0.2)
+                    continue
 
-                        if not installed:
-                            reinject(frame)
+                # Playwright-Sync-API aktiv halten und Browser-Warteschlangen auslesen.
+                try:
+                    session.page.wait_for_timeout(200)
+                except Exception:
+                    break
+
+                for frame in list(session.page.frames):
+                    try:
+                        installed = frame.evaluate(
+                            "() => Boolean(window.__wmRecorderInstalled)"
+                        )
+                    except Exception:
+                        installed = True
+
+                    if not installed:
+                        inject(frame)
+
+                    try:
+                        queued = frame.evaluate(
+                            """() => {
+                                const queue = Array.isArray(window.__wmRecorderQueue)
+                                    ? window.__wmRecorderQueue
+                                    : [];
+                                window.__wmRecorderQueue = [];
+                                return queue;
+                            }"""
+                        )
+                    except Exception:
+                        queued = []
+
+                    if not isinstance(queued, list):
+                        continue
+
+                    for payload in queued:
+                        if not isinstance(payload, dict):
+                            continue
+
+                        action = self._normalize(payload)
+                        if not action:
+                            continue
+
+                        with self._lock:
+                            self._append_deduplicated(
+                                session.actions,
+                                action,
+                            )
+                            self._persist_action(
+                                session.site_id,
+                                action,
+                            )
+
+                with self._lock:
+                    session.polls += 1
 
         except Exception as exc:
             session.error = str(exc)
             session.state = "error"
 
         finally:
+            # Letzte Warteschlange auslesen, bevor Browser geschlossen wird.
+            try:
+                self._drain_once(session)
+            except Exception:
+                pass
+
             self._close_session_resources(session)
 
             if session.state not in {
@@ -221,6 +227,45 @@ class MacroRecorder:
                 "cancelled",
             }:
                 session.state = "finished"
+
+    def _drain_once(self, session: RecorderSession) -> None:
+        if not session.page:
+            return
+
+        for frame in list(session.page.frames):
+            try:
+                queued = frame.evaluate(
+                    """() => {
+                        const queue = Array.isArray(window.__wmRecorderQueue)
+                            ? window.__wmRecorderQueue
+                            : [];
+                        window.__wmRecorderQueue = [];
+                        return queue;
+                    }"""
+                )
+            except Exception:
+                queued = []
+
+            if not isinstance(queued, list):
+                continue
+
+            for payload in queued:
+                if not isinstance(payload, dict):
+                    continue
+
+                action = self._normalize(payload)
+                if not action:
+                    continue
+
+                with self._lock:
+                    self._append_deduplicated(
+                        session.actions,
+                        action,
+                    )
+                    self._persist_action(
+                        session.site_id,
+                        action,
+                    )
 
     @staticmethod
     def _normalize(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -282,19 +327,20 @@ class MacroRecorder:
                     "count": len(persisted),
                     "error": "",
                     "injected_frames": 0,
+                    "polls": 0,
                 }
 
             persisted = self._read_persisted_actions(site_id)
-            count = max(
-                len(self._session.actions),
-                len(persisted),
-            )
 
             return {
                 "state": self._session.state,
-                "count": count,
+                "count": max(
+                    len(self._session.actions),
+                    len(persisted),
+                ),
                 "error": self._session.error,
                 "injected_frames": self._session.injected_frames,
+                "polls": self._session.polls,
             }
 
     def stop(self, site_id: int) -> list[dict[str, Any]]:
@@ -302,8 +348,13 @@ class MacroRecorder:
             session = self._require_session(site_id)
             session.state = "stopping"
 
-        # Debounce-Timer aus Eingabefeldern und letzte Browserereignisse.
+        # Letzte Debounce- und Change-Ereignisse abwarten.
         time.sleep(1.2)
+
+        try:
+            self._drain_once(session)
+        except Exception:
+            pass
 
         with self._lock:
             session.stop_event.set()
@@ -318,14 +369,10 @@ class MacroRecorder:
             actions = list(session.actions)
 
             for action in persisted:
-                self._append_deduplicated(
-                    actions,
-                    action,
-                )
+                self._append_deduplicated(actions, action)
 
             session.state = "finished"
             self._session = None
-
             return actions
 
     def cancel(self, site_id: int) -> None:
@@ -338,9 +385,7 @@ class MacroRecorder:
         if thread:
             thread.join(timeout=10)
 
-        self._record_path(site_id).unlink(
-            missing_ok=True,
-        )
+        self._record_path(site_id).unlink(missing_ok=True)
 
         with self._lock:
             self._session = None
@@ -357,28 +402,14 @@ class MacroRecorder:
         except RuntimeError:
             pass
 
-    def _require_session(
-        self,
-        site_id: int,
-    ) -> RecorderSession:
-        if (
-            not self._session
-            or self._session.site_id != site_id
-        ):
-            raise RuntimeError(
-                "Keine laufende Aufnahme für diesen Monitor."
-            )
-
+    def _require_session(self, site_id: int) -> RecorderSession:
+        if not self._session or self._session.site_id != site_id:
+            raise RuntimeError("Keine laufende Aufnahme für diesen Monitor.")
         return self._session
 
     @staticmethod
-    def _close_session_resources(
-        session: RecorderSession,
-    ) -> None:
-        for resource in (
-            session.context,
-            session.browser,
-        ):
+    def _close_session_resources(session: RecorderSession) -> None:
+        for resource in (session.context, session.browser):
             try:
                 if resource:
                     resource.close()
@@ -400,18 +431,13 @@ class MacroRecorder:
   }
 
   window.__wmRecorderInstalled = true;
+  window.__wmRecorderQueue = Array.isArray(window.__wmRecorderQueue)
+    ? window.__wmRecorderQueue
+    : [];
 
   function report(payload) {
     try {
-      if (typeof window.wmRecordAction !== "function") {
-        return;
-      }
-
-      const result = window.wmRecordAction(payload);
-
-      if (result && typeof result.catch === "function") {
-        result.catch(() => {});
-      }
+      window.__wmRecorderQueue.push(payload);
     } catch (_) {}
   }
 
@@ -519,20 +545,19 @@ class MacroRecorder:
         .slice(0, 2);
 
       if (classes.length) {
-        part += "."
-          + classes.map(cssEscape).join(".");
+        part += "." + classes.map(cssEscape).join(".");
       }
 
       const parent = node.parentElement;
 
       if (parent) {
-        const same = [...parent.children]
+        const siblings = [...parent.children]
           .filter((child) =>
             child.tagName === node.tagName
           );
 
-        if (same.length > 1) {
-          part += `:nth-of-type(${same.indexOf(node) + 1})`;
+        if (siblings.length > 1) {
+          part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
         }
       }
 
@@ -546,11 +571,7 @@ class MacroRecorder:
     };
   }
 
-  function send(
-    actionType,
-    element,
-    value = ""
-  ) {
+  function send(actionType, element, value = "") {
     const target = selectorFor(element);
 
     report({
@@ -570,9 +591,7 @@ class MacroRecorder:
       }
 
       if (element.tagName === "SELECT") {
-        const option = element.options[
-          element.selectedIndex
-        ];
+        const option = element.options[element.selectedIndex];
 
         send(
           "select",
@@ -596,11 +615,7 @@ class MacroRecorder:
       }
 
       if (element.matches("input, textarea")) {
-        send(
-          "fill",
-          element,
-          element.value
-        );
+        send("fill", element, element.value);
       }
     },
     true
@@ -623,11 +638,7 @@ class MacroRecorder:
       clearTimeout(element.__wmRecorderTimer);
 
       element.__wmRecorderTimer = setTimeout(
-        () => send(
-          "fill",
-          element,
-          element.value
-        ),
+        () => send("fill", element, element.value),
         350
       );
     },
@@ -647,11 +658,7 @@ class MacroRecorder:
       );
 
       if (clickable) {
-        send(
-          "click",
-          clickable,
-          ""
-        );
+        send("click", clickable, "");
       }
     },
     true
@@ -660,9 +667,7 @@ class MacroRecorder:
   document.addEventListener(
     "keydown",
     (event) => {
-      if (
-        ["Enter", "Tab", "Escape"].includes(event.key)
-      ) {
+      if (["Enter", "Tab", "Escape"].includes(event.key)) {
         report({
           action_type: "press",
           selector_type: "css",
