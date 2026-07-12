@@ -1,10 +1,14 @@
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from app.config import settings
 from app.models import Change, Site
 from app.services.change_flags import mark_unread
 from app.services.compare import compare_images
 from app.services.screenshot import capture
+
+
+_global_check_lock = Lock()
 
 def normalize_url(url: str) -> str:
     url = url.strip()
@@ -15,7 +19,7 @@ def normalize_url(url: str) -> str:
 def public_path(path: Path) -> str:
     return str(path).replace(str(settings.data_dir), "/data")
 
-def run_check(db, site_id: int):
+def _run_check_unlocked(db, site_id: int):
     site = db.get(Site, site_id)
     if not site:
         raise ValueError("Monitor nicht gefunden")
@@ -68,3 +72,15 @@ def run_check(db, site_id: int):
     db.commit()
     db.refresh(change)
     return change
+
+
+def run_check(db, site_id: int):
+    """
+    Serialisiert alle Prüfungen innerhalb des Containers.
+
+    Scheduler, manuelle Prüfung und Makro-Test können dadurch nicht
+    gleichzeitig Chromium/Playwright starten.
+    """
+    with _global_check_lock:
+        return _run_check_unlocked(db, site_id)
+

@@ -1,3 +1,4 @@
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -6,7 +7,21 @@ from app.db import SessionLocal
 from app.models import Site
 from app.services.monitor import run_check
 
-scheduler = BackgroundScheduler(timezone=settings.app_timezone)
+executors = {
+    "default": ThreadPoolExecutor(max_workers=1),
+}
+
+job_defaults = {
+    "coalesce": True,
+    "max_instances": 1,
+    "misfire_grace_time": 300,
+}
+
+scheduler = BackgroundScheduler(
+    timezone=settings.app_timezone,
+    executors=executors,
+    job_defaults=job_defaults,
+)
 
 def check_job(site_id: int):
     db = SessionLocal()
@@ -40,7 +55,7 @@ def sync_jobs():
             if job:
                 job.reschedule(trigger)
             else:
-                scheduler.add_job(check_job, trigger, args=[site.id], id=job_id, replace_existing=True, max_instances=1, coalesce=True)
+                scheduler.add_job(check_job, trigger, args=[site.id], id=job_id, replace_existing=True)
 
         for job_id in existing - wanted:
             if job_id.startswith("site-"):
