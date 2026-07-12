@@ -509,9 +509,11 @@ class MacroRecorder:
       };
     }
 
+    const role = element.getAttribute("role");
+
     if (
       element.tagName === "BUTTON"
-      || element.getAttribute("role") === "button"
+      || role === "button"
     ) {
       const text = (
         element.innerText
@@ -525,6 +527,26 @@ class MacroRecorder:
           selector: text
         };
       }
+    }
+
+    const visibleText = (
+      element.innerText
+      || element.textContent
+      || ""
+    ).replace(/\s+/g, " ").trim();
+
+    if (
+      visibleText
+      && visibleText.length <= 100
+      && (
+        ["DIV", "LI", "SPAN", "LABEL", "OPTION"].includes(element.tagName)
+        || ["option", "menuitem", "radio", "checkbox", "combobox", "listbox"].includes(role)
+      )
+    ) {
+      return {
+        selector_type: "text",
+        selector: visibleText
+      };
     }
 
     const parts = [];
@@ -622,6 +644,28 @@ class MacroRecorder:
   );
 
   document.addEventListener(
+    "beforeinput",
+    (event) => {
+      const element = event.target;
+
+      if (
+        element instanceof Element
+        && element.matches(
+          'input:not([type="checkbox"]):not([type="radio"]), textarea'
+        )
+      ) {
+        clearTimeout(element.__wmRecorderBeforeInputTimer);
+
+        element.__wmRecorderBeforeInputTimer = setTimeout(
+          () => send("fill", element, element.value),
+          450
+        );
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
     "input",
     (event) => {
       const element = event.target;
@@ -646,20 +690,29 @@ class MacroRecorder:
   );
 
   document.addEventListener(
-    "click",
+    "pointerdown",
     (event) => {
-      if (!(event.target instanceof Element)) {
+      const path = typeof event.composedPath === "function"
+        ? event.composedPath()
+        : [event.target];
+
+      const element = path.find(
+        (item) => item instanceof Element
+      );
+
+      if (!element) {
         return;
       }
 
-      const clickable = event.target.closest(
-        'button, a, [role="button"], '
-        + 'input[type="submit"], input[type="button"]'
-      );
-
-      if (clickable) {
-        send("click", clickable, "");
+      if (
+        element.matches(
+          'input:not([type="button"]):not([type="submit"]), textarea, select'
+        )
+      ) {
+        return;
       }
+
+      send("click", element, "");
     },
     true
   );
