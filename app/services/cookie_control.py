@@ -1,30 +1,173 @@
 import re
+from playwright.sync_api import Page
 
-BUTTON_TEXTS = [
-    "Alle akzeptieren","Alles akzeptieren","Akzeptieren","Zustimmen",
-    "Accept all","Accept","Agree","I agree","OK","Okay"
+
+REJECT_TEXTS = [
+    "Alle ablehnen", "Alles ablehnen", "Ablehnen",
+    "Nur notwendige", "Nur notwendige Cookies",
+    "Nur erforderliche Cookies", "Notwendige Cookies",
+    "Reject all", "Reject", "Decline", "Only necessary",
 ]
 
-SELECTORS = [
-    "#onetrust-banner-sdk",".cookie-banner",".cookie-consent",".cookie-notice",
-    ".cc-window",".cmpbox",".qc-cmp2-container",".fc-consent-root","#didomi-host"
+ACCEPT_TEXTS = [
+    "Alle akzeptieren", "Alles akzeptieren", "Akzeptieren",
+    "Zustimmen", "Accept all", "Accept", "Agree",
 ]
 
-def handle_cookies(page, mode: str):
-    if mode in ("auto", "click"):
-        for text in BUTTON_TEXTS:
+REJECT_SELECTORS = [
+    "#onetrust-reject-all-handler",
+    "#CybotCookiebotDialogBodyButtonDecline",
+    "button[data-testid='uc-deny-all-button']",
+    "button[data-testid='uc-reject-all-button']",
+    "#didomi-notice-disagree-button",
+    "button.sp_choice_type_REJECT_ALL",
+    ".cmpboxbtnno",
+    ".cmplz-deny",
+]
+
+ACCEPT_SELECTORS = [
+    "#onetrust-accept-btn-handler",
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "button[data-testid='uc-accept-all-button']",
+    "#didomi-notice-agree-button",
+    "button.sp_choice_type_ACCEPT_ALL",
+    ".cmpboxbtnyes",
+    ".cmplz-accept",
+]
+
+BANNER_SELECTORS = [
+    "#onetrust-banner-sdk", "#onetrust-consent-sdk",
+    "#CybotCookiebotDialog", "#CybotCookiebotDialogBodyUnderlay",
+    "#usercentrics-root", "[data-testid='uc-container']",
+    "#didomi-host", ".didomi-popup-container",
+    ".qc-cmp2-container", ".sp_message_container", ".sp_veil",
+    ".cmpbox", ".cmplz-cookiebanner", "#BorlabsCookieBox",
+    ".iubenda-cs-container", ".iubenda-cs-overlay",
+    ".cookie-banner", ".cookie-consent", ".cookie-notice",
+    ".cookie-overlay", ".consent-overlay", ".privacy-modal",
+    "[class*='cookie-banner']", "[class*='cookie_consent']",
+    "[class*='consent-banner']", "[id*='cookie-banner']",
+    "[id*='cookie-consent']", "[id*='consent-banner']",
+]
+
+
+def _frames(page: Page):
+    return [page.main_frame] + [
+        frame for frame in page.frames if frame is not page.main_frame
+    ]
+
+
+def _click_selector(frame, selector: str) -> bool:
+    try:
+        locator = frame.locator(selector).first
+        if locator.count() and locator.is_visible():
+            locator.click(timeout=1500)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _click_text(frame, texts: list[str]) -> bool:
+    for text in texts:
+        for locator in (
+            frame.get_by_role("button", name=re.compile(re.escape(text), re.I)).first,
+            frame.get_by_role("link", name=re.compile(re.escape(text), re.I)).first,
+        ):
             try:
-                loc = page.get_by_role("button", name=re.compile(re.escape(text), re.I))
-                if loc.count():
-                    loc.first.click(timeout=1200)
-                    page.wait_for_timeout(500)
+                if locator.count() and locator.is_visible():
+                    locator.click(timeout=1500)
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def _remove(page: Page, extra_selectors: str = "") -> None:
+    selectors = list(BANNER_SELECTORS)
+    selectors.extend(
+        value.strip()
+        for value in (extra_selectors or "").split(",")
+        if value.strip()
+    )
+
+    script = (
+        "(selectors) => {"
+        "for (const selector of selectors) {"
+        "try { document.querySelectorAll(selector).forEach(e => e.remove()); } catch (_) {}"
+        "}"
+        "document.documentElement.style.setProperty('overflow','auto','important');"
+        "document.body.style.setProperty('overflow','auto','important');"
+        "document.body.style.setProperty('position','static','important');"
+        "document.body.style.setProperty('padding-right','0','important');"
+        "document.body.classList.remove('modal-open','no-scroll','noscroll','overflow-hidden');"
+        "}"
+    )
+
+    for frame in _frames(page):
+        try:
+            frame.evaluate(script, selectors)
+        except Exception:
+            pass
+
+
+def _remove_large_overlays(page: Page) -> None:
+    script = (
+        "() => {"
+        "document.querySelectorAll('body *').forEach(e => {"
+        "const s = getComputedStyle(e);"
+        "const z = parseInt(s.zIndex || '0', 10);"
+        "if (s.position === 'fixed' && z >= 100 && "
+        "e.offsetWidth >= innerWidth * 0.7 && e.offsetHeight >= innerHeight * 0.7) {"
+        "e.remove();"
+        "}"
+        "});"
+        "}"
+    )
+
+    for frame in _frames(page):
+        try:
+            frame.evaluate(script)
+        except Exception:
+            pass
+
+
+def handle_cookies(page: Page, mode: str, extra_selectors: str = "") -> None:
+    normalized = (mode or "necessary").strip().lower()
+    normalized = {"auto": "necessary", "click": "accept"}.get(
+        normalized,
+        normalized,
+    )
+
+    if normalized == "off":
+        return
+
+    page.wait_for_timeout(700)
+
+    if normalized in {"necessary", "strict"}:
+        clicked = False
+        for frame in _frames(page):
+            for selector in REJECT_SELECTORS:
+                if _click_selector(frame, selector):
+                    clicked = True
                     break
-            except Exception:
-                pass
+            if clicked or _click_text(frame, REJECT_TEXTS):
+                break
 
-    if mode in ("auto", "hide"):
-        for sel in SELECTORS:
-            try:
-                page.locator(sel).evaluate_all("(els)=>els.forEach(e=>e.remove())")
-            except Exception:
-                pass
+    elif normalized == "accept":
+        clicked = False
+        for frame in _frames(page):
+            for selector in ACCEPT_SELECTORS:
+                if _click_selector(frame, selector):
+                    clicked = True
+                    break
+            if clicked or _click_text(frame, ACCEPT_TEXTS):
+                break
+
+    if normalized in {"necessary", "accept", "hide", "strict"}:
+        _remove(page, extra_selectors)
+
+    if normalized == "strict":
+        _remove_large_overlays(page)
+        page.wait_for_timeout(300)
+        _remove(page, extra_selectors)
