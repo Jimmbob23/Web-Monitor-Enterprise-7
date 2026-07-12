@@ -70,8 +70,14 @@
   <div class="col-6 col-lg-2"><label class="form-label">Wartezeit</label><input class="form-control" type="number" name="wait_seconds" value="{{site.wait_seconds}}"></div>
   <div class="col-6 col-lg-2"><label class="form-label">Breite</label><input class="form-control" type="number" name="viewport_width" value="{{site.viewport_width}}"></div>
   <div class="col-6 col-lg-2"><label class="form-label">Höhe</label><input class="form-control" type="number" name="viewport_height" value="{{site.viewport_height}}"></div>
-  <div class="col-12 col-lg-2"><label class="form-label">Cookie-Modus</label><select class="form-select" name="cookie_mode"><option value="auto" {% if site.cookie_mode=="auto" %}selected{% endif %}>Auto</option><option value="click" {% if site.cookie_mode=="click" %}selected{% endif %}>Klicken</option><option value="hide" {% if site.cookie_mode=="hide" %}selected{% endif %}>Ausblenden</option><option value="off" {% if site.cookie_mode=="off" %}selected{% endif %}>Aus</option></select></div>
-  <div class="col-12 col-lg-2"><label class="form-label">CSS ignorieren</label><input class="form-control" name="ignore_selectors" value="{{site.ignore_selectors}}"></div>
+  <div class="col-12 col-lg-2"><label class="form-label">Cookie-Modus</label><select class="form-select" name="cookie_mode">
+<option value="necessary" {% if site.cookie_mode in ["necessary", "auto"] %}selected{% endif %}>Nur notwendige ablehnen</option>
+<option value="accept" {% if site.cookie_mode in ["accept", "click"] %}selected{% endif %}>Alle akzeptieren</option>
+<option value="hide" {% if site.cookie_mode == "hide" %}selected{% endif %}>Banner nur ausblenden</option>
+<option value="strict" {% if site.cookie_mode == "strict" %}selected{% endif %}>Strenger Screenshot-Modus</option>
+<option value="off" {% if site.cookie_mode == "off" %}selected{% endif %}>Keine Behandlung</option>
+</select></div>
+  <div class="col-12 col-lg-2"><label class="form-label">CSS ignorieren / Cookie-Overlays</label><input class="form-control" name="ignore_selectors" value="{{site.ignore_selectors}}"></div>
 </div>
 <label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="enabled" {% if site.enabled %}checked{% endif %}> Monitor aktiv</label>
 <button class="btn btn-primary mt-3">Speichern</button>
