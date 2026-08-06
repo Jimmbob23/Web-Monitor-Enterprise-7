@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Benutzerverwaltung</h1>
+<form method="post" action="/admin/users" class="row g-2 mb-4">
+  <div class="col-12 col-md-4"><label class="form-label">Benutzername</label><input class="form-control" name="username" required></div>
+  <div class="col-12 col-md-4"><label class="form-label">Passwort</label><input class="form-control" type="password" name="password" required></div>
+  <div class="col-12 col-md-2"><label class="form-label">Rolle</label><select class="form-select" name="role"><option value="user">Benutzer</option><option value="admin">Admin</option></select></div>
+  <div class="col-12 col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">Anlegen</button></div>
+</form>
+<div class="table-responsive">
+<table class="table table-darkish">
+<thead><tr><th>Name</th><th>Rolle</th><th>Aktiv</th><th>Aktion</th></tr></thead>
+<tbody>
+{% for u in users %}
+<tr>
+  <td>{{u.username}}</td><td>{{u.role}}</td><td>{{"Ja" if u.active else "Nein"}}</td>
+  <td>
+    <form method="post" action="/admin/users/{{u.id}}/toggle">
+      <button class="btn btn-sm btn-outline-warning">Aktiv umschalten</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

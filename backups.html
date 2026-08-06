@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Backup & Restore</h1>
+
+{% if message %}
+<div class="alert alert-success">{{message}}</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header">Backup erstellen</div>
+      <div class="card-body">
+        <p>
+          Beide Formate sichern Monitore, Ordner, Tags, Zeitpläne und
+          Interaktions-Makros.
+        </p>
+
+        <form method="post" action="/backups/create">
+          <label class="form-label">Dateiformat</label>
+
+          <select class="form-select mb-3" name="file_format">
+            <option value="csv">CSV – für Excel/LibreOffice</option>
+            <option value="json">JSON – technische Vollsicherung</option>
+          </select>
+
+          <button class="btn btn-primary">Backup erstellen</button>
+        </form>
+
+        <div class="form-text mt-3">
+          CSV verwendet ein Semikolon als Trennzeichen und UTF-8 mit BOM.
+          Makro-Schritte stehen als JSON in der Spalte
+          <code>macro_actions_json</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header">Backup wiederherstellen</div>
+      <div class="card-body">
+        <form
+          method="post"
+          action="/backups/restore"
+          enctype="multipart/form-data"
+        >
+          <label class="form-label">CSV- oder JSON-Datei</label>
+
+          <input
+            class="form-control mb-3"
+            type="file"
+            name="file"
+            accept=".csv,.json,text/csv,application/json"
+            required
+          >
+
+          <label class="form-check mb-3">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              name="replace_existing"
+            >
+            Bestehende Monitore vor dem Restore löschen
+          </label>
+
+          <button class="btn btn-warning">Restore starten</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="mt-4">Vorhandene Backups</h2>
+
+<div class="table-responsive">
+  <table class="table table-darkish">
+    <thead>
+      <tr>
+        <th>Zeit</th>
+        <th>Datei</th>
+        <th>Format</th>
+        <th>Download</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for b in backups %}
+      <tr>
+        <td>{{b.created_at|berlin_time}}</td>
+        <td>{{b.filename}}</td>
+        <td>
+          {% if b.filename.lower().endswith(".csv") %}
+          <span class="badge text-bg-success">CSV</span>
+          {% else %}
+          <span class="badge text-bg-info">JSON</span>
+          {% endif %}
+        </td>
+        <td>
+          <a
+            class="btn btn-sm btn-outline-info"
+            href="/backups/{{b.id}}/download"
+          >
+            Download
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4">Noch keine Backups vorhanden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

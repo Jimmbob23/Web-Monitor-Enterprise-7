@@ -1,0 +1,15 @@
+unread_first: True
+skip_unread_scan: True
+region_model: True
+region_migration: True
+region_screenshot: True
+region_create_form: True
+region_edit_form: True
+sticky_header: True
+browser_cache: True
+status_cache: True
+serial_checks_retained: True
+recorder_retained: True
+cookie_strict_retained: True
+adaptive_darkmode_retained: True
+backup_region: True
